@@ -214,6 +214,16 @@ impl CrawlConfigBuilder {
         self
     }
 
+    /// Set the TLS fingerprint profile for the reqwest HTTP path.
+    ///
+    /// Use [`crate::NoTlsSpoof`] (default) to keep the standard TLS stack, or
+    /// [`crate::ChromeLikeTlsProfile`] (requires the `tls-stealth` feature) to
+    /// mimic a Chrome ClientHello.
+    pub fn tls_profile(mut self, provider: crate::tls::DynTlsProfileProvider) -> Self {
+        self.inner.tls_profile = provider;
+        self
+    }
+
     /// Set the list of user-agent strings for rotation.
     pub fn user_agents(mut self, value: Vec<String>) -> Self {
         self.inner.user_agents = value;

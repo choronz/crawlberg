@@ -47,7 +47,7 @@ pub(crate) async fn fetch_robots_rules(
     let ua = config
         .user_agent
         .as_deref()
-        .unwrap_or(concat!("crawlberg/", env!("CARGO_PKG_VERSION")));
+        .unwrap_or_else(|| crate::defaults::default_user_agent());
     let resp = http_fetch(&robots_url, config, &std::collections::HashMap::new(), client)
         .await
         .ok()?;

@@ -36,6 +36,10 @@ mcp = ["dep:rmcp", "dep:schemars"]
 api = ["dep:axum", "dep:tower-http", "dep:utoipa", "dep:uuid", "dep:base64", "native-runtime"]
 mcp-http = ["mcp", "api"]
 warc = ["dep:uuid"]
+# TLS ClientHello fingerprint spoofing. Replaces the default native-tls backend
+# with a rustls client configured to mimic a Chrome handshake. Do NOT combine
+# with the native-tls default backend (reqwest rejects multiple TLS backends).
+tls-stealth = ["dep:rustls", "dep:webpki-roots", "reqwest/rustls", "reqwest/webpki-roots"]
 full = ["browser", "browser-native", "ai", "telemetry-init", "interact", "mcp", "api", "mcp-http", "warc"]
 
 [dependencies]
@@ -68,6 +72,8 @@ quick-xml = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rmcp = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+webpki-roots = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

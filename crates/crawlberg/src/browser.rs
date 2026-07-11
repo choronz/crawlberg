@@ -309,7 +309,7 @@ async fn page_fetch(
     let resolved_ua = if let Some(ref ua) = config.user_agent {
         ua.clone()
     } else if stealth {
-        resolve_default_user_agent().to_string()
+        crate::defaults::default_user_agent().to_string()
     } else {
         "".to_string()
     };
@@ -503,12 +503,6 @@ async fn launch_or_connect(config: &CrawlConfig) -> Result<(Browser, Handler, Op
             }
         }
     }
-}
-
-/// Returns a modern Chrome user-agent string suitable for the runtime environment.
-/// Used as the default UA when stealth mode is enabled.
-fn resolve_default_user_agent() -> &'static str {
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 }
 
 /// Set the viewport (device metrics) via CDP Emulation.setDeviceMetricsOverride.

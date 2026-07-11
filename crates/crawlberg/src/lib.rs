@@ -45,6 +45,7 @@ mod scrape;
 pub mod sink;
 pub mod sitemap;
 pub mod telemetry;
+pub(crate) mod tls;
 pub(crate) mod tower;
 pub mod traits;
 mod types;
@@ -90,6 +91,9 @@ pub use sink::{EventSink, MultiEventSink, TracingEventSink};
 #[cfg(feature = "telemetry-init")]
 pub use telemetry::{InitError as TelemetryInitError, TelemetryConfig, TelemetryGuard, init_otlp};
 pub use telemetry::{current_traceparent, with_traceparent};
+#[cfg(feature = "tls-stealth")]
+pub use tls::ChromeLikeTlsProfile;
+pub use tls::{NoTlsSpoof, TlsProfileProvider};
 pub use types::antibot::{AntibotError, AntibotStrategy, Decision, DefaultAntibotStrategy, DynAntibotStrategy};
 pub use types::{
     ActionResult, ArticleMetadata, AssetCategory, AttemptOutcome, AuthConfig, BrowserBackend, BrowserConfig,

@@ -44,15 +44,29 @@ fn apply_headers(
     config: &CrawlConfig,
     crawl_req: &CrawlRequest,
 ) -> reqwest::RequestBuilder {
-    if !crawl_req.headers.contains_key("user-agent") {
-        if let Some(ref ua) = config.user_agent {
-            req = req.header(reqwest::header::USER_AGENT, ua.as_str());
-        } else {
-            req = req.header(
-                reqwest::header::USER_AGENT,
-                concat!("crawlberg/", env!("CARGO_PKG_VERSION")),
-            );
+    // Resolve UA; default to a realistic Chrome UA instead of the bot string.
+    let ua = config
+        .user_agent
+        .clone()
+        .or_else(|| crawl_req.headers.get("user-agent").cloned())
+        .unwrap_or_else(|| crate::defaults::default_user_agent().to_string());
+
+    // Caller-supplied headers win over the Chrome-faithful defaults below.
+    let overrides: std::collections::HashSet<String> = config
+        .custom_headers
+        .keys()
+        .chain(crawl_req.headers.keys())
+        .map(|k| k.to_lowercase())
+        .collect();
+
+    for (k, v) in crate::defaults::default_browser_headers() {
+        if overrides.contains(&k.to_lowercase()) {
+            continue;
         }
+        req = req.header(&k, &v);
+    }
+    if !overrides.contains("user-agent") {
+        req = req.header(reqwest::header::USER_AGENT, &ua);
     }
 
     if let Some(ref auth) = config.auth {
@@ -275,5 +289,81 @@ impl Service<CrawlRequest> for HttpFetchService {
 
             Err(CrawlError::Other("retry exhausted".into()))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::CrawlConfig;
+
+    /// Build a request via `apply_headers` and return its resolved header map.
+    fn built_headers(config: &CrawlConfig, req: &CrawlRequest) -> reqwest::header::HeaderMap {
+        let client = reqwest::Client::new();
+        let rb = apply_headers(client.get("http://example.com"), config, req);
+        rb.build().expect("request must build").headers().clone()
+    }
+
+    #[test]
+    fn default_request_is_not_a_bot() {
+        let config = CrawlConfig::default();
+        let req = CrawlRequest::new("http://example.com");
+        let headers = built_headers(&config, &req);
+
+        let ua = headers.get("user-agent").unwrap().to_str().unwrap();
+        assert!(!ua.contains("crawlberg"), "UA must not expose the crawler name: {ua}");
+        assert!(ua.contains("Chrome"), "UA should read as a real browser: {ua}");
+    }
+
+    #[test]
+    fn default_request_carries_chrome_client_hints() {
+        let config = CrawlConfig::default();
+        let req = CrawlRequest::new("http://example.com");
+        let headers = built_headers(&config, &req);
+
+        assert_eq!(headers.get("accept-language").unwrap(), "en-US,en;q=0.9");
+        assert_eq!(headers.get("sec-fetch-site").unwrap(), "none");
+        assert_eq!(headers.get("sec-fetch-mode").unwrap(), "navigate");
+        assert_eq!(headers.get("sec-fetch-dest").unwrap(), "document");
+        assert_eq!(headers.get("upgrade-insecure-requests").unwrap(), "1");
+        assert!(headers.contains_key("sec-ch-ua"));
+        assert!(headers.contains_key("sec-ch-ua-platform"));
+    }
+
+    #[test]
+    fn custom_headers_override_client_hint_defaults() {
+        let mut config = CrawlConfig::default();
+        config
+            .custom_headers
+            .insert("sec-fetch-site".to_string(), "cross-site".to_string());
+        let req = CrawlRequest::new("http://example.com");
+        let headers = built_headers(&config, &req);
+
+        assert_eq!(headers.get("sec-fetch-site").unwrap(), "cross-site");
+        // Other hints are untouched.
+        assert_eq!(headers.get("sec-fetch-mode").unwrap(), "navigate");
+    }
+
+    #[test]
+    fn per_request_headers_override_default_user_agent() {
+        let config = CrawlConfig::default();
+        let mut req = CrawlRequest::new("http://example.com");
+        req.headers
+            .insert("user-agent".to_string(), "CustomBot/9.9".to_string());
+        let headers = built_headers(&config, &req);
+
+        assert_eq!(headers.get("user-agent").unwrap(), "CustomBot/9.9");
+    }
+
+    #[test]
+    fn explicit_config_user_agent_is_used() {
+        let mut config = CrawlConfig::default();
+        config.user_agent = Some("MyAgent/1.0".to_string());
+        let req = CrawlRequest::new("http://example.com");
+        let headers = built_headers(&config, &req);
+
+        assert_eq!(headers.get("user-agent").unwrap(), "MyAgent/1.0");
+        // Client hints still applied alongside an explicit UA.
+        assert_eq!(headers.get("sec-fetch-site").unwrap(), "none");
     }
 }

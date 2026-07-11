@@ -91,10 +91,29 @@ pub(crate) async fn http_fetch(
     loop {
         let mut req = client.get(current_url.to_string());
 
-        if let Some(ref ua) = config.user_agent {
-            req = req.header(USER_AGENT, ua.as_str());
-        } else {
-            req = req.header(USER_AGENT, concat!("crawlberg/", env!("CARGO_PKG_VERSION")));
+        let ua = config
+            .user_agent
+            .clone()
+            .unwrap_or_else(|| crate::defaults::default_user_agent().to_string());
+
+        // Chrome-faithful defaults first; caller-supplied headers override them.
+        let mut overrides: std::collections::HashSet<String> = config
+            .custom_headers
+            .keys()
+            .chain(extra_headers.keys())
+            .map(|k| k.to_lowercase())
+            .collect();
+        if config.user_agent.is_some() {
+            overrides.insert("user-agent".to_string());
+        }
+        for (k, v) in crate::defaults::default_browser_headers() {
+            if overrides.contains(&k.to_lowercase()) {
+                continue;
+            }
+            req = req.header(&k, &v);
+        }
+        if !overrides.contains("user-agent") {
+            req = req.header(USER_AGENT, &ua);
         }
 
         match config.auth {
@@ -347,6 +366,14 @@ pub(crate) fn build_client(config: &CrawlConfig) -> Result<reqwest::Client, Craw
             proxy = proxy.basic_auth(user, pass);
         }
         builder = builder.proxy(proxy);
+    }
+
+    // ~keep Under `tls-stealth`, swap in a Chrome-like ClientHello when the
+    // configured provider supplies one. `NoTlsSpoof` returns None, preserving
+    // the default TLS behavior.
+    #[cfg(feature = "tls-stealth")]
+    if let Some(tls_config) = config.tls_profile.client_config() {
+        builder = builder.use_preconfigured_tls(tls_config);
     }
 
     builder

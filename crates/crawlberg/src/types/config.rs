@@ -432,6 +432,15 @@ pub struct CrawlConfig {
     #[serde(skip)]
     #[cfg_attr(alef, alef(skip))]
     pub proxy_provider: Option<std::sync::Arc<dyn crate::ProxyProvider>>,
+    /// Optional [`crate::TlsProfileProvider`] for TLS ClientHello fingerprint
+    /// spoofing on the reqwest HTTP path. When `None` (default), crawlberg uses
+    /// the standard TLS stack. The built-in [`crate::NoTlsSpoof`] is a no-op;
+    /// [`crate::ChromeLikeTlsProfile`] (requires the `tls-stealth` feature)
+    /// mimics a Chrome handshake. Not serializable — Rust callers inject at
+    /// runtime.
+    #[serde(skip)]
+    #[cfg_attr(alef, alef(skip))]
+    pub tls_profile: crate::tls::DynTlsProfileProvider,
     /// Shared browser session pool for session affinity (not serializable).
     /// When set alongside `session_affinity: true` in BrowserConfig, the pool
     /// is used to cache Pages by (domain, proxy) so cookies and fingerprint
@@ -490,6 +499,7 @@ impl Default for CrawlConfig {
             #[cfg(feature = "browser")]
             browser_session_pool: None,
             proxy_provider: None,
+            tls_profile: std::sync::Arc::new(crate::tls::NoTlsSpoof),
         }
     }
 }
@@ -666,5 +676,22 @@ mod tests {
         let err = config.validate().unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("chromiumoxide"), "unexpected error: {msg}");
+    }
+
+    #[test]
+    fn default_tls_profile_is_a_noop() {
+        let config = CrawlConfig::default();
+        assert!(
+            config.tls_profile.client_config().is_none(),
+            "default tls_profile must not alter TLS behavior"
+        );
+    }
+
+    #[test]
+    fn builder_sets_tls_profile() {
+        let config = CrawlConfig::builder()
+            .tls_profile(std::sync::Arc::new(crate::tls::NoTlsSpoof))
+            .build();
+        assert!(config.tls_profile.client_config().is_none());
     }
 }
